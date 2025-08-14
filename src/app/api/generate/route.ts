@@ -4,37 +4,7 @@ import { searchStudyWebsites } from '@/lib/services/google-search'
 import { analyzeSite } from '@/lib/services/site-analyzer'
 import { calculateSiteScore } from '@/lib/scoring'
 import { canonicalizeUrl, deduplicateUrls, getFaviconUrl } from '@/lib/utils'
-
-// Type for site score with included site data
-type SiteScoreWithSite = {
-  id: string
-  siteId: string
-  runId: string
-  searchPresenceScore: number
-  performanceScore: number
-  backlinkAuthorityScore: number
-  freshnessScore: number
-  usabilityScore: number
-  totalScore: number
-  scoreBreakdown: any
-  rank: number | null
-  createdAt: Date
-  site: {
-    id: string
-    url: string
-    domain: string
-    name: string
-    title: string | null
-    description: string | null
-    favicon: string | null
-    category: string
-    metaDescription: string | null
-    keywords: string[]
-    language: string | null
-    createdAt: Date
-    updatedAt: Date
-  }
-}
+import type { Prisma } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -303,16 +273,14 @@ export async function GET(request: NextRequest) {
       where: { id: runId },
       include: {
         scores: {
-          include: {
-            site: true
-          },
-          orderBy: [
-            { rank: 'asc' },
-            { totalScore: 'desc' }
-          ]
+          include: { site: true },      // <-- important
+          orderBy: { score: 'desc' }
         }
       }
-    })
+    });
+    if (!run) {
+      return Response.json({ error: 'Run not found' }, { status: 404 });
+    }
 
     if (!run) {
       return NextResponse.json(
@@ -337,28 +305,19 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Format results with proper typing
-    const results = run.scores.map((scoreRecord: SiteScoreWithSite, index: number) => ({
-      rank: scoreRecord.rank || (index + 1),
+    // Format results
+    type ScoredSite = Prisma.SiteScoreGetPayload<{ include: { site: true } }>;
+    const results = run.scores.map((score: ScoredSite, index: number) => ({
+      rank: score.rank ?? index + 1,
       site: {
-        id: scoreRecord.site.id,
-        name: scoreRecord.site.name,
-        url: scoreRecord.site.url,
-        title: scoreRecord.site.title,
-        description: scoreRecord.site.description,
-        favicon: scoreRecord.site.favicon,
-        domain: scoreRecord.site.domain,
+        id: score.site.id,
+        url: score.site.url,
+        title: score.site.title ?? null,
+        description: score.site.description ?? null,
       },
-      score: {
-        total: scoreRecord.totalScore,
-        searchPresence: scoreRecord.searchPresenceScore,
-        performance: scoreRecord.performanceScore,
-        backlinkAuthority: scoreRecord.backlinkAuthorityScore,
-        freshness: scoreRecord.freshnessScore,
-        usability: scoreRecord.usabilityScore,
-        breakdown: scoreRecord.scoreBreakdown,
-      }
-    }))
+      score: score.score,
+      components: score.components,
+    }));
 
     return NextResponse.json({
       success: true,
