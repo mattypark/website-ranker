@@ -4,7 +4,37 @@ import { searchStudyWebsites } from '@/lib/services/google-search'
 import { analyzeSite } from '@/lib/services/site-analyzer'
 import { calculateSiteScore } from '@/lib/scoring'
 import { canonicalizeUrl, deduplicateUrls, getFaviconUrl } from '@/lib/utils'
-import type { Prisma } from '@prisma/client';
+
+// Type for site score with included site data
+type SiteScoreWithSite = {
+  id: string
+  siteId: string
+  runId: string
+  searchPresenceScore: number
+  performanceScore: number
+  backlinkAuthorityScore: number
+  freshnessScore: number
+  usabilityScore: number
+  totalScore: number
+  scoreBreakdown: any
+  rank: number | null
+  createdAt: Date
+  site: {
+    id: string
+    url: string
+    domain: string
+    name: string
+    title: string | null
+    description: string | null
+    favicon: string | null
+    category: string
+    metaDescription: string | null
+    keywords: string[]
+    language: string | null
+    createdAt: Date
+    updatedAt: Date
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -307,26 +337,26 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Format results
-    const results = run.scores.map((score, index) => ({
-      rank: score.rank || (index + 1),
+    // Format results with proper typing
+    const results = run.scores.map((scoreRecord: SiteScoreWithSite, index: number) => ({
+      rank: scoreRecord.rank || (index + 1),
       site: {
-        id: score.site.id,
-        name: score.site.name,
-        url: score.site.url,
-        title: score.site.title,
-        description: score.site.description,
-        favicon: score.site.favicon,
-        domain: score.site.domain,
+        id: scoreRecord.site.id,
+        name: scoreRecord.site.name,
+        url: scoreRecord.site.url,
+        title: scoreRecord.site.title,
+        description: scoreRecord.site.description,
+        favicon: scoreRecord.site.favicon,
+        domain: scoreRecord.site.domain,
       },
       score: {
-        total: score.totalScore,
-        searchPresence: score.searchPresenceScore,
-        performance: score.performanceScore,
-        backlinkAuthority: score.backlinkAuthorityScore,
-        freshness: score.freshnessScore,
-        usability: score.usabilityScore,
-        breakdown: score.scoreBreakdown,
+        total: scoreRecord.totalScore,
+        searchPresence: scoreRecord.searchPresenceScore,
+        performance: scoreRecord.performanceScore,
+        backlinkAuthority: scoreRecord.backlinkAuthorityScore,
+        freshness: scoreRecord.freshnessScore,
+        usability: scoreRecord.usabilityScore,
+        breakdown: scoreRecord.scoreBreakdown,
       }
     }))
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { ArrowLeft, ExternalLink, Info, TrendingUp, Award, Zap, Shield, Clock } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Info, TrendingUp, Award, Zap, Shield, Clock, Search } from 'lucide-react'
 import Link from 'next/link'
 
 interface SiteResult {
