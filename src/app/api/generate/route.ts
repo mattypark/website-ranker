@@ -4,6 +4,7 @@ import { searchStudyWebsites } from '@/lib/services/google-search'
 import { analyzeSite } from '@/lib/services/site-analyzer'
 import { calculateSiteScore } from '@/lib/scoring'
 import { canonicalizeUrl, deduplicateUrls, getFaviconUrl } from '@/lib/utils'
+import type { Prisma } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   try {
