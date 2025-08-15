@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// Temporary implementation that works without external APIs
-// This will demonstrate the correct data flow and structure
+// Temporary implementation that works with dynamic niches
+// This demonstrates the correct data flow and structure
 
 function slugify(text: string): string {
   return text
@@ -18,6 +18,9 @@ function titleCase(text: string): string {
     .join(' ')
 }
 
+// In-memory storage to simulate database for this demo
+const runStorage = new Map<string, any>()
+
 // Mock data generator for different niches
 function generateMockResults(niche: string): any[] {
   const mockSites = {
@@ -33,8 +36,7 @@ function generateMockResults(niche: string): any[] {
       { domain: 'aaptiv.com', title: 'Aaptiv', description: 'Audio fitness classes' },
       { domain: 'sworkit.com', title: 'Sworkit', description: 'Personalized workouts' }
     ],
-    'cooking banana bread': [
-      { domain: 'kingarthurbaking.com', title: 'King Arthur Baking', description: 'Professional baking recipes' },
+    'cooking': [
       { domain: 'allrecipes.com', title: 'Allrecipes', description: 'Community recipe sharing' },
       { domain: 'foodnetwork.com', title: 'Food Network', description: 'Chef recipes and cooking shows' },
       { domain: 'bonappetit.com', title: 'Bon Appétit', description: 'Food and cooking magazine' },
@@ -43,35 +45,84 @@ function generateMockResults(niche: string): any[] {
       { domain: 'epicurious.com', title: 'Epicurious', description: 'Gourmet recipes and cooking' },
       { domain: 'simplyrecipes.com', title: 'Simply Recipes', description: 'Simple, trusted recipes' },
       { domain: 'food.com', title: 'Food.com', description: 'Recipe community and reviews' },
+      { domain: 'kingarthurbaking.com', title: 'King Arthur Baking', description: 'Professional baking recipes' },
       { domain: 'bettycrocker.com', title: 'Betty Crocker', description: 'Classic American recipes' }
     ],
-    'programming blogs': [
+    'programming': [
       { domain: 'dev.to', title: 'DEV Community', description: 'Programming community and articles' },
-      { domain: 'medium.com', title: 'Medium', description: 'Programming articles and tutorials' },
       { domain: 'stackoverflow.com', title: 'Stack Overflow', description: 'Programming Q&A community' },
-      { domain: 'github.com', title: 'GitHub Blog', description: 'Developer platform and blog' },
+      { domain: 'github.com', title: 'GitHub', description: 'Developer platform and code hosting' },
+      { domain: 'medium.com', title: 'Medium', description: 'Programming articles and tutorials' },
       { domain: 'hackernoon.com', title: 'Hacker Noon', description: 'Tech and programming stories' },
       { domain: 'css-tricks.com', title: 'CSS-Tricks', description: 'Web development tips and tricks' },
       { domain: 'smashingmagazine.com', title: 'Smashing Magazine', description: 'Web design and development' },
       { domain: 'freecodecamp.org', title: 'freeCodeCamp', description: 'Learn to code for free' },
       { domain: 'codepen.io', title: 'CodePen', description: 'Front-end code playground' },
       { domain: 'hashnode.com', title: 'Hashnode', description: 'Developer blogging platform' }
+    ],
+    'travel': [
+      { domain: 'booking.com', title: 'Booking.com', description: 'Hotel and accommodation booking' },
+      { domain: 'expedia.com', title: 'Expedia', description: 'Travel booking and planning' },
+      { domain: 'tripadvisor.com', title: 'TripAdvisor', description: 'Travel reviews and recommendations' },
+      { domain: 'airbnb.com', title: 'Airbnb', description: 'Unique stays and experiences' },
+      { domain: 'lonelyplanet.com', title: 'Lonely Planet', description: 'Travel guides and inspiration' },
+      { domain: 'kayak.com', title: 'KAYAK', description: 'Travel search and comparison' },
+      { domain: 'skyscanner.com', title: 'Skyscanner', description: 'Flight search and booking' },
+      { domain: 'hotels.com', title: 'Hotels.com', description: 'Hotel booking platform' },
+      { domain: 'priceline.com', title: 'Priceline', description: 'Discount travel deals' },
+      { domain: 'travelocity.com', title: 'Travelocity', description: 'Travel booking service' }
+    ],
+    'productivity': [
+      { domain: 'notion.so', title: 'Notion', description: 'All-in-one workspace' },
+      { domain: 'trello.com', title: 'Trello', description: 'Project management boards' },
+      { domain: 'asana.com', title: 'Asana', description: 'Team project management' },
+      { domain: 'todoist.com', title: 'Todoist', description: 'Task management app' },
+      { domain: 'evernote.com', title: 'Evernote', description: 'Note-taking and organization' },
+      { domain: 'slack.com', title: 'Slack', description: 'Team communication platform' },
+      { domain: 'monday.com', title: 'Monday.com', description: 'Work operating system' },
+      { domain: 'airtable.com', title: 'Airtable', description: 'Database and spreadsheet hybrid' },
+      { domain: 'zapier.com', title: 'Zapier', description: 'Workflow automation' },
+      { domain: 'toggl.com', title: 'Toggl', description: 'Time tracking software' }
+    ],
+    'design': [
+      { domain: 'figma.com', title: 'Figma', description: 'Collaborative design tool' },
+      { domain: 'adobe.com', title: 'Adobe Creative Cloud', description: 'Creative software suite' },
+      { domain: 'canva.com', title: 'Canva', description: 'Graphic design platform' },
+      { domain: 'sketch.com', title: 'Sketch', description: 'Digital design toolkit' },
+      { domain: 'dribbble.com', title: 'Dribbble', description: 'Design inspiration community' },
+      { domain: 'behance.net', title: 'Behance', description: 'Creative portfolio platform' },
+      { domain: 'unsplash.com', title: 'Unsplash', description: 'Free stock photography' },
+      { domain: 'invisionapp.com', title: 'InVision', description: 'Digital product design platform' },
+      { domain: 'framer.com', title: 'Framer', description: 'Interactive design tool' },
+      { domain: 'principle.design', title: 'Principle', description: 'Animation and interaction design' }
     ]
   }
 
-  // Get mock sites for this niche or generate generic ones
-  const sites = mockSites[niche.toLowerCase()] || [
-    { domain: 'example1.com', title: `Best ${niche} Site`, description: `Top resource for ${niche}` },
-    { domain: 'example2.com', title: `${titleCase(niche)} Hub`, description: `Community for ${niche}` },
-    { domain: 'example3.com', title: `${titleCase(niche)} Guide`, description: `Complete guide to ${niche}` },
-    { domain: 'example4.com', title: `${titleCase(niche)} Pro`, description: `Professional ${niche} resource` },
-    { domain: 'example5.com', title: `${titleCase(niche)} Central`, description: `Everything about ${niche}` },
-    { domain: 'example6.com', title: `${titleCase(niche)} World`, description: `${titleCase(niche)} community` },
-    { domain: 'example7.com', title: `${titleCase(niche)} Tips`, description: `Tips and tricks for ${niche}` },
-    { domain: 'example8.com', title: `${titleCase(niche)} Master`, description: `Master ${niche} skills` },
-    { domain: 'example9.com', title: `${titleCase(niche)} Zone`, description: `Your ${niche} resource` },
-    { domain: 'example10.com', title: `${titleCase(niche)} Plus`, description: `Advanced ${niche} content` }
-  ]
+  // Find matching sites based on niche keywords
+  let sites = []
+  const lowerNiche = niche.toLowerCase()
+  
+  // Direct match first
+  if (mockSites[lowerNiche]) {
+    sites = mockSites[lowerNiche]
+  } else {
+    // Fuzzy matching based on keywords
+    for (const [key, value] of Object.entries(mockSites)) {
+      if (lowerNiche.includes(key) || key.includes(lowerNiche.split(' ')[0])) {
+        sites = value
+        break
+      }
+    }
+  }
+  
+  // If no match found, generate generic sites
+  if (sites.length === 0) {
+    sites = Array.from({ length: 10 }, (_, i) => ({
+      domain: `${lowerNiche.replace(/\s+/g, '')}${i + 1}.com`,
+      title: `${titleCase(niche)} ${i + 1}`,
+      description: `Top resource for ${niche}`
+    }))
+  }
 
   return sites.slice(0, 10).map((site, index) => ({
     rank: index + 1,
@@ -125,6 +176,19 @@ export async function POST(request: NextRequest) {
 
     // Generate mock results based on the niche
     const results = generateMockResults(niche)
+
+    // Store the run data for later retrieval
+    const runData = {
+      id: runId,
+      niche,
+      nicheSlug,
+      status: 'completed',
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      results
+    }
+    
+    runStorage.set(runId, runData)
 
     console.info('[discover]', niche, { 
       items: results.length * 3, // Simulate finding more items initially
@@ -193,19 +257,34 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  // For mock implementation, return sample data
-  const mockNiche = 'fitness apps'
-  const results = generateMockResults(mockNiche)
+  try {
+    // Get the stored run data
+    const runData = runStorage.get(runId)
+    
+    if (!runData) {
+      return NextResponse.json(
+        { success: false, error: 'Run not found' },
+        { status: 404 }
+      )
+    }
 
-  return NextResponse.json({
-    success: true,
-    runId,
-    niche: mockNiche,
-    nicheSlug: 'fitness-apps',
-    status: 'completed',
-    totalAnalyzed: results.length,
-    startedAt: new Date(Date.now() - 30000).toISOString(),
-    completedAt: new Date().toISOString(),
-    results
-  })
+    return NextResponse.json({
+      success: true,
+      runId: runData.id,
+      niche: runData.niche,
+      nicheSlug: runData.nicheSlug,
+      status: runData.status,
+      totalAnalyzed: runData.results.length,
+      startedAt: runData.startedAt,
+      completedAt: runData.completedAt,
+      results: runData.results
+    })
+
+  } catch (error) {
+    console.error('[API] Error fetching results:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch results' },
+      { status: 500 }
+    )
+  }
 }
