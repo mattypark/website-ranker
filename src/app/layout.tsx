@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "StudyRank - Top Study Websites",
-  description: "Discover the best study websites ranked by performance, authority, and quality",
+  title: "NicheRank - Top Websites for Any Niche",
+  description: "Discover the best websites for any niche ranked by search presence, performance, authority, freshness, and usability",
 };
 
 export default function RootLayout({

@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma"
@@ -12,4 +9,62 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Run {
+  id         String   @id @default(cuid())
+  niche      String   // The topic/niche searched for (e.g., "fitness apps")
+  nicheSlug  String   // URL-friendly slug (e.g., "fitness-apps")
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  status     String   @default("running") // "running", "completed", "failed"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  sites Site[]
+
+  @@index([niche])
+  @@index([nicheSlug])
+  @@index([startedAt])
+  @@map("runs")
+}
+
+model Site {
+  id          String   @id @default(cuid())
+  runId       String   // Foreign key to Run
+  domain      String   // Domain name (e.g., "example.com")
+  url         String   // Full URL
+  title       String?  // Site title
+  description String?  // Site description
+  favicon     String?  // Favicon URL
+  rank        Int      // Ranking position (1-10)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  run    Run         @relation(fields: [runId], references: [id], onDelete: Cascade)
+  scores SiteScore[]
+
+  @@index([runId])
+  @@index([domain])
+  @@index([rank])
+  @@map("sites")
+}
+
+model SiteScore {
+  id                     String   @id @default(cuid())
+  siteId                 String   @unique // Foreign key to Site
+  totalScore             Int      // Overall score (0-100)
+  searchPresenceScore    Int      // Search presence score (0-100)
+  performanceScore       Int      // Performance score (0-100)
+  backlinkAuthorityScore Int      // Backlink authority score (0-100)
+  freshnessScore         Int      // Freshness score (0-100)
+  usabilityScore         Int      // Usability score (0-100)
+  components             Json     // Score components for debugging
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId])
+  @@map("site_scores")
 }

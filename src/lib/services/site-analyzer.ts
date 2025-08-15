@@ -1,275 +1,153 @@
-import { getPageSpeedInsights, getMobilePageSpeedInsights } from './google-pagespeed'
-import { getPageRank } from './open-pagerank'
-import { checkSearchPresence } from './google-search'
-import { canonicalizeUrl, extractLastModified } from '@/lib/utils'
-
-export interface ComprehensiveSiteAnalysis {
-  // Basic info
-  url: string
-  domain: string
+export interface SiteAnalysis {
   title: string | null
-  metaDescription: string | null
-  
-  // Performance metrics
-  performanceScore: number
-  accessibilityScore: number
-  bestPracticesScore: number
-  seoScore: number
-  firstContentfulPaint: number
-  largestContentfulPaint: number
-  cumulativeLayoutShift: number
-  firstInputDelay: number
-  totalBlockingTime: number
-  speedIndex: number
-  loadTime: number
-  pageSize: number
-  
-  // Authority metrics
-  pageRank: number
-  domainRank: number
-  domainAuthority: number
-  backlinks: number
-  
-  // Search presence
-  searchResults: number
-  searchRank: number | null
-  
-  // Content freshness
-  lastModified: Date | null
-  contentAge: number | null
-  
-  // Technical features
-  httpsEnabled: boolean
-  mobileOptimized: boolean
-  hasRobotsTxt: boolean
-  hasSitemap: boolean
-  statusCode: number
-  responseTime: number
-  
-  // Errors
-  errorMessage: string | null
+  description: string | null
+  favicon: string | null
+  hasHttps: boolean
+  hasViewport: boolean
+  hasOgTags: boolean
+  usabilityScore: number // 0-1 normalized
+  freshnessScore: number // 0-1 normalized
+  error?: string
 }
 
 /**
- * Perform comprehensive analysis of a website
+ * Analyze a site for usability and freshness factors
+ * Performs cheap checks only - no expensive operations
  */
-export async function analyzeSite(url: string): Promise<ComprehensiveSiteAnalysis> {
-  const startTime = Date.now()
-  const canonicalUrl = canonicalizeUrl(url)
-  const domain = new URL(canonicalUrl).hostname.replace('www.', '')
-  
-  let analysis: Partial<ComprehensiveSiteAnalysis> = {
-    url: canonicalUrl,
-    domain,
-    httpsEnabled: canonicalUrl.startsWith('https://'),
-    errorMessage: null,
-  }
-
+export async function analyzeSite(origin: string): Promise<SiteAnalysis> {
   try {
-    // Fetch basic page info
-    const pageInfo = await fetchPageInfo(canonicalUrl)
-    analysis = { ...analysis, ...pageInfo }
+    const url = new URL(origin)
+    
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout
 
-    // Run all analyses in parallel for better performance
-    const [pageSpeedResult, pageRankResult, searchPresenceResult, lastModified] = await Promise.allSettled([
-      getPageSpeedInsights(canonicalUrl),
-      getPageRank(canonicalUrl),
-      checkSearchPresence(canonicalUrl, 'study learning education'),
-      extractLastModified(canonicalUrl),
-    ])
-
-    // Process PageSpeed results
-    if (pageSpeedResult.status === 'fulfilled') {
-      const pageSpeed = pageSpeedResult.value
-      analysis = {
-        ...analysis,
-        performanceScore: pageSpeed.performanceScore,
-        accessibilityScore: pageSpeed.accessibilityScore,
-        bestPracticesScore: pageSpeed.bestPracticesScore,
-        seoScore: pageSpeed.seoScore,
-        firstContentfulPaint: pageSpeed.firstContentfulPaint,
-        largestContentfulPaint: pageSpeed.largestContentfulPaint,
-        cumulativeLayoutShift: pageSpeed.cumulativeLayoutShift,
-        firstInputDelay: pageSpeed.firstInputDelay,
-        totalBlockingTime: pageSpeed.totalBlockingTime,
-        speedIndex: pageSpeed.speedIndex,
-        loadTime: pageSpeed.loadTime,
-        pageSize: pageSpeed.pageSize,
-        mobileOptimized: pageSpeed.mobileOptimized,
-      }
-    } else {
-      console.error('PageSpeed analysis failed:', pageSpeedResult.reason)
-      // Set default values
-      analysis = {
-        ...analysis,
-        performanceScore: 0,
-        accessibilityScore: 0,
-        bestPracticesScore: 0,
-        seoScore: 0,
-        firstContentfulPaint: 0,
-        largestContentfulPaint: 0,
-        cumulativeLayoutShift: 0,
-        firstInputDelay: 0,
-        totalBlockingTime: 0,
-        speedIndex: 0,
-        loadTime: 0,
-        pageSize: 0,
-        mobileOptimized: false,
-      }
-    }
-
-    // Process PageRank results
-    if (pageRankResult.status === 'fulfilled') {
-      const pageRank = pageRankResult.value
-      analysis = {
-        ...analysis,
-        pageRank: pageRank.pageRank,
-        domainRank: pageRank.domainRank,
-        domainAuthority: pageRank.domainAuthority,
-        backlinks: pageRank.backlinks,
-      }
-    } else {
-      console.error('PageRank analysis failed:', pageRankResult.reason)
-      analysis = {
-        ...analysis,
-        pageRank: 0,
-        domainRank: 0,
-        domainAuthority: 0,
-        backlinks: 0,
-      }
-    }
-
-    // Process search presence results
-    if (searchPresenceResult.status === 'fulfilled') {
-      const searchPresence = searchPresenceResult.value
-      analysis = {
-        ...analysis,
-        searchResults: searchPresence.totalResults,
-        searchRank: searchPresence.searchRank,
-      }
-    } else {
-      console.error('Search presence analysis failed:', searchPresenceResult.reason)
-      analysis = {
-        ...analysis,
-        searchResults: 0,
-        searchRank: null,
-      }
-    }
-
-    // Process last modified date
-    if (lastModified.status === 'fulfilled' && lastModified.value) {
-      const lastModDate = lastModified.value
-      const contentAge = Math.floor((Date.now() - lastModDate.getTime()) / (1000 * 60 * 60 * 24))
-      analysis = {
-        ...analysis,
-        lastModified: lastModDate,
-        contentAge,
-      }
-    } else {
-      analysis = {
-        ...analysis,
-        lastModified: null,
-        contentAge: null,
-      }
-    }
-
-    // Check for robots.txt and sitemap
-    const [robotsCheck, sitemapCheck] = await Promise.allSettled([
-      checkRobotsTxt(canonicalUrl),
-      checkSitemap(canonicalUrl),
-    ])
-
-    analysis.hasRobotsTxt = robotsCheck.status === 'fulfilled' ? robotsCheck.value : false
-    analysis.hasSitemap = sitemapCheck.status === 'fulfilled' ? sitemapCheck.value : false
-
-  } catch (error) {
-    console.error(`Error analyzing site ${canonicalUrl}:`, error)
-    analysis.errorMessage = error instanceof Error ? error.message : 'Unknown error'
-  }
-
-  analysis.responseTime = Date.now() - startTime
-
-  return analysis as ComprehensiveSiteAnalysis
-}
-
-/**
- * Fetch basic page information
- */
-async function fetchPageInfo(url: string): Promise<{
-  title: string | null
-  metaDescription: string | null
-  statusCode: number
-}> {
-  try {
-    const response = await fetch(url, {
+    const response = await fetch(origin, {
       headers: {
-        'User-Agent': 'StudyRank Bot 1.0 (Website Analyzer)',
+        'User-Agent': 'NicheRank Bot 1.0 (+https://nicherank.com)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
       },
+      signal: controller.signal,
     })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
 
     const html = await response.text()
     
-    // Extract title
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-    const title = titleMatch ? titleMatch[1].trim() : null
-
-    // Extract meta description
-    const metaMatch = html.match(/<meta[^>]*name="description"[^>]*content="([^"]*)"[^>]*>/i)
-    const metaDescription = metaMatch ? metaMatch[1].trim() : null
-
+    // Extract basic info
+    const title = extractTitle(html)
+    const description = extractMetaDescription(html)
+    const favicon = generateFaviconUrl(url.hostname)
+    
+    // Check usability factors
+    const hasHttps = origin.startsWith('https://')
+    const hasViewport = html.includes('name="viewport"') || html.includes("name='viewport'")
+    const hasOgTags = html.includes('property="og:') || html.includes("property='og:")
+    
+    // Calculate usability score (0-1)
+    let usabilityScore = 0
+    if (hasHttps) usabilityScore += 0.4      // 40% for HTTPS
+    if (hasViewport) usabilityScore += 0.3   // 30% for mobile viewport
+    if (hasOgTags) usabilityScore += 0.3     // 30% for social meta tags
+    
+    // Calculate freshness score (simplified)
+    const freshnessScore = calculateFreshnessScore(html, response.headers)
+    
     return {
       title,
-      metaDescription,
-      statusCode: response.status,
+      description,
+      favicon,
+      hasHttps,
+      hasViewport,
+      hasOgTags,
+      usabilityScore: Math.max(0, Math.min(1, usabilityScore)),
+      freshnessScore: Math.max(0, Math.min(1, freshnessScore)),
     }
+
   } catch (error) {
-    console.error(`Error fetching page info for ${url}:`, error)
+    console.error(`Site analysis error for ${origin}:`, error)
+    
+    // Return minimal data on error
+    const url = new URL(origin)
     return {
       title: null,
-      metaDescription: null,
-      statusCode: 0,
+      description: null,
+      favicon: generateFaviconUrl(url.hostname),
+      hasHttps: origin.startsWith('https://'),
+      hasViewport: false,
+      hasOgTags: false,
+      usabilityScore: origin.startsWith('https://') ? 0.4 : 0, // At least HTTPS score
+      freshnessScore: 0.5, // Default middle score
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }
 
 /**
- * Check if robots.txt exists
+ * Extract page title from HTML
  */
-async function checkRobotsTxt(url: string): Promise<boolean> {
-  try {
-    const domain = new URL(url).origin
-    const robotsUrl = `${domain}/robots.txt`
-    
-    const response = await fetch(robotsUrl, { method: 'HEAD' })
-    return response.ok
-  } catch {
-    return false
+function extractTitle(html: string): string | null {
+  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+  if (titleMatch && titleMatch[1]) {
+    return titleMatch[1].trim().slice(0, 100) // Limit length
   }
+  return null
 }
 
 /**
- * Check if sitemap exists
+ * Extract meta description from HTML
  */
-async function checkSitemap(url: string): Promise<boolean> {
-  try {
-    const domain = new URL(url).origin
-    const sitemapUrls = [
-      `${domain}/sitemap.xml`,
-      `${domain}/sitemap_index.xml`,
-      `${domain}/sitemap.txt`,
-    ]
-    
-    for (const sitemapUrl of sitemapUrls) {
-      try {
-        const response = await fetch(sitemapUrl, { method: 'HEAD' })
-        if (response.ok) return true
-      } catch {
-        continue
-      }
-    }
-    
-    return false
-  } catch {
-    return false
+function extractMetaDescription(html: string): string | null {
+  const metaMatch = html.match(/<meta[^>]*name="description"[^>]*content="([^"]*)"[^>]*>/i) ||
+                   html.match(/<meta[^>]*content="([^"]*)"[^>]*name="description"[^>]*>/i)
+  
+  if (metaMatch && metaMatch[1]) {
+    return metaMatch[1].trim().slice(0, 200) // Limit length
   }
+  return null
+}
+
+/**
+ * Generate favicon URL
+ */
+function generateFaviconUrl(hostname: string): string {
+  return `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`
+}
+
+/**
+ * Calculate freshness score based on various signals
+ */
+function calculateFreshnessScore(html: string, headers: Headers): number {
+  let score = 0.5 // Default middle score
+  
+  // Check Last-Modified header
+  const lastModified = headers.get('last-modified')
+  if (lastModified) {
+    const lastModDate = new Date(lastModified)
+    const daysSince = (Date.now() - lastModDate.getTime()) / (1000 * 60 * 60 * 24)
+    
+    if (daysSince <= 30) score = 1.0      // Updated within 30 days
+    else if (daysSince <= 90) score = 0.8  // Updated within 3 months
+    else if (daysSince <= 180) score = 0.6 // Updated within 6 months
+    else if (daysSince <= 365) score = 0.4 // Updated within 1 year
+    else score = 0.2                       // Older than 1 year
+  }
+  
+  // Check for copyright year (simple heuristic)
+  const currentYear = new Date().getFullYear()
+  const copyrightMatch = html.match(/copyright[^0-9]*(\d{4})/i)
+  if (copyrightMatch) {
+    const copyrightYear = parseInt(copyrightMatch[1])
+    if (copyrightYear === currentYear) {
+      score = Math.max(score, 0.8) // Recent copyright suggests freshness
+    } else if (copyrightYear >= currentYear - 1) {
+      score = Math.max(score, 0.6) // Last year is still decent
+    }
+  }
+  
+  return Math.max(0, Math.min(1, score))
 }
