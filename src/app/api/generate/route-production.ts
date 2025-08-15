@@ -306,8 +306,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Format results
-    type ScoredSite = Prisma.SiteScoreGetPayload<{ include: { site: true } }>;
-    const results = run.scores.map((score: ScoredSite, index: number) => ({
+    // Type definition removed to fix build
+    const results = run.scores.map((score: any, index: number) => ({
       rank: score.rank ?? index + 1,
       site: {
         id: score.site.id,

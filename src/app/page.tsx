@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, TrendingUp, Award, Clock } from 'lucide-react'
 
 export default function Home() {
