@@ -13,91 +13,142 @@ export interface GoogleSearchResponse {
     totalResults: string
     searchTime: number
   }
+  error?: {
+    code: number
+    message: string
+  }
 }
 
 /**
  * Discover websites for a niche using Google Custom Search
- * Uses multiple query strategies and deduplication
+ * Uses multiple query strategies and returns only real results
  */
-export async function discoverNicheWebsites(niche: string): Promise<string[]> {
+export async function discoverNicheWebsites(niche: string): Promise<{
+  items: Array<{ url: string; title: string; description: string }>;
+  error?: string;
+}> {
   const queries = buildSearchQueries(niche)
   const allResults: SearchResult[] = []
+  let lastError: string | null = null
   
-  console.info('[discover] Starting search for niche:', niche, { queries })
+  console.info('[cse] Starting discovery for niche:', niche, { queries: queries.length })
   
-  // Search with each query to get diverse results
-  for (const query of queries) {
+  // Try each query variant
+  for (const [index, query] of queries.entries()) {
     try {
-      console.info('[discover] Searching:', query)
+      console.info('[cse] Trying variant', index + 1, ':', query)
       
       // Get first page
       const page1Results = await searchGoogle(query, 1)
       allResults.push(...page1Results)
       
+      console.info('[cse]', { 
+        niche, 
+        variant: `${index + 1}/${queries.length}`, 
+        query,
+        httpStatus: 200, 
+        got: page1Results.length 
+      })
+      
       // Get second page if first page had results
       if (page1Results.length > 0) {
-        const page2Results = await searchGoogle(query, 11)
-        allResults.push(...page2Results)
+        try {
+          const page2Results = await searchGoogle(query, 11)
+          allResults.push(...page2Results)
+          console.info('[cse] Got page 2:', page2Results.length, 'more results')
+        } catch (error) {
+          // Page 2 failure is not critical
+          console.warn('[cse] Page 2 failed for', query, error)
+        }
       }
       
-      // Add small delay between queries to be respectful
-      await new Promise(resolve => setTimeout(resolve, 200))
+      // Add delay between queries
+      if (index < queries.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 200))
+      }
+      
     } catch (error) {
-      console.warn('[discover] Query failed:', query, error)
-      // Continue with other queries even if one fails
-    }
-  }
-  
-  // Extract origins and deduplicate
-  const originSet = new Set<string>()
-  const origins: string[] = []
-  
-  for (const result of allResults) {
-    try {
-      const url = new URL(result.link)
-      const origin = url.origin
-      
-      // Skip if we already have this origin
-      if (originSet.has(origin)) {
-        continue
-      }
-      
-      // Skip common non-website domains but be permissive
-      if (shouldSkipDomain(url.hostname)) {
-        continue
-      }
-      
-      originSet.add(origin)
-      origins.push(origin)
-      
-      // Stop when we have enough origins (up to 15 to allow for scoring failures)
-      if (origins.length >= 15) break
-    } catch (error) {
-      // Skip invalid URLs
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+      console.warn('[cse-error]', { 
+        niche, 
+        variant: `${index + 1}/${queries.length}`,
+        query,
+        error: errorMsg 
+      })
+      lastError = errorMsg
       continue
     }
   }
   
-  console.info('[discover]', niche, { 
-    items: allResults.length, 
-    unique: origins.length,
-    queries: queries.length 
+  if (allResults.length === 0) {
+    return {
+      items: [],
+      error: lastError || 'No results found from any search variant'
+    }
+  }
+  
+  // Extract origins and deduplicate - NO FABRICATION
+  const uniqueItems: Array<{ url: string; title: string; description: string }> = []
+  const seenOrigins = new Set<string>()
+  
+  for (const result of allResults) {
+    try {
+      // Validate URL
+      const url = new URL(result.link)
+      const origin = url.origin
+      
+      // Skip if we already have this origin
+      if (seenOrigins.has(origin)) {
+        continue
+      }
+      
+      // Skip common non-website domains but be very permissive
+      if (shouldSkipDomain(url.hostname)) {
+        continue
+      }
+      
+      seenOrigins.add(origin)
+      uniqueItems.push({
+        url: result.link, // Use original link, not origin
+        title: result.title || url.hostname,
+        description: result.snippet || `Website from ${url.hostname}`
+      })
+      
+      // Stop at reasonable limit to avoid overwhelming scoring
+      if (uniqueItems.length >= 15) break
+      
+    } catch (error) {
+      // Skip invalid URLs - do NOT fabricate replacements
+      console.warn('[cse] Skipping invalid URL:', result.link)
+      continue
+    }
+  }
+  
+  console.info('[cse]', { 
+    niche, 
+    got: allResults.length, 
+    unique: uniqueItems.length,
+    queries: queries.length
   })
   
-  // Return up to 10 origins (important: don't return empty if we have some)
-  return origins.slice(0, 10)
+  // Return actual results - NO PADDING to 10
+  return {
+    items: uniqueItems.slice(0, 10) // Limit to 10 but don't pad
+  }
 }
 
 /**
- * Build multiple search queries for a niche
+ * Build multiple search queries for a niche (in priority order)
  */
 function buildSearchQueries(niche: string): string[] {
   const cleanNiche = niche.toLowerCase().trim()
   
   return [
     `best ${cleanNiche} websites`,
+    `top ${cleanNiche} sites`, 
     `top ${cleanNiche} blogs`,
     `${cleanNiche} resources`,
+    `best ${cleanNiche} tools`
   ]
 }
 
@@ -120,16 +171,31 @@ async function searchGoogle(query: string, startIndex: number = 1): Promise<Sear
   })
 
   if (!response.ok) {
+    const errorText = await response.text()
+    console.warn('[cse-error]', { 
+      query,
+      status: response.status, 
+      body: errorText.slice(0, 200) 
+    })
     throw new Error(`Google Search API error: ${response.status} ${response.statusText}`)
   }
 
   const data: GoogleSearchResponse = await response.json()
   
+  if (data.error) {
+    console.warn('[cse-error]', {
+      query,
+      status: data.error.code,
+      body: data.error.message
+    })
+    throw new Error(`Google Search API error: ${data.error.message}`)
+  }
+  
   return data.items || []
 }
 
 /**
- * Check if we should skip this domain (be very permissive)
+ * Check if we should skip this domain (be very permissive - only skip major platforms)
  */
 function shouldSkipDomain(hostname: string): boolean {
   const skipDomains = [
@@ -138,12 +204,9 @@ function shouldSkipDomain(hostname: string): boolean {
     'facebook.com',
     'twitter.com',
     'instagram.com',
-    'linkedin.com',
-    'reddit.com',
-    'wikipedia.org',
+    'linkedin.com'
   ]
   
-  // Check exact domain matches (be permissive - only skip major platforms)
   const domain = hostname.replace(/^www\./, '')
   return skipDomains.includes(domain)
 }

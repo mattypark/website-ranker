@@ -103,7 +103,7 @@ export default function Home() {
                 </div>
                 <div className="flex justify-between items-center mt-2">
                   <p className="text-sm text-gray-500">
-                    Leave empty to explore study websites (default)
+                    Enter any niche or topic you want to explore
                   </p>
                   <span className="text-sm text-gray-400">
                     {niche.length}/60
