@@ -1,11 +1,22 @@
 import { NextRequest } from 'next/server'
 
+// Helper function to get client IP from headers (Vercel-compatible)
+function getClientIp(request: NextRequest): string {
+  return (
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    request.headers.get('x-vercel-forwarded-for') ||
+    request.headers.get('cf-connecting-ip') ||
+    'unknown'
+  )
+}
+
 // Simple in-memory rate limiter for development
 // In production, you'd use Redis or another persistent store
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>()
 
 export function rateLimit(request: NextRequest, limit: number = 3, windowMs: number = 60000): boolean {
-  const ip = request.ip || request.headers.get('x-forwarded-for') || 'unknown'
+  const ip = getClientIp(request)
   const now = Date.now()
   
   // Clean up old entries

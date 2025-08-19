@@ -4,6 +4,17 @@ import { scoreMultipleSites } from '@/lib/services/scoring'
 // Use fallback for now - replace with real CSE when env vars are available
 import { discoverNicheWebsites } from '@/lib/services/google-search-fallback'
 
+// Helper function to get client IP from headers (Vercel-compatible)
+function getClientIp(request: NextRequest): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    request.headers.get("x-vercel-forwarded-for") ||
+    request.headers.get("cf-connecting-ip") ||
+    "unknown"
+  )
+}
+
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -26,7 +37,7 @@ const runStorage = new Map<string, any>()
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>()
 
 function rateLimit(request: NextRequest, limit: number = 3, windowMs: number = 60000): boolean {
-  const ip = request.ip || request.headers.get('x-forwarded-for') || 'unknown'
+  const ip = getClientIp(request)
   const now = Date.now()
   
   const current = rateLimitMap.get(ip)
